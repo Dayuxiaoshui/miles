@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 
 import torch
+from megatron.bridge.models.conversion.param_mapping import MambaConv1dMapping
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +143,16 @@ def _build_bridge_subclass():
             registry = super().mapping_registry()
             base = list(registry.mappings if hasattr(registry, "mappings") else registry._mappings)
             extras = [AutoMapping(megatron_param=m, hf_param=h) for m, h in _NEMOTRONH_MOE_MAPPINGS.items()]
-            return MegatronMappingRegistry(*base, *extras)
+            known_names = {mapping.megatron_param for mapping in base}
+            mamba = [
+                MambaConv1dMapping(
+                    megatron_param=f"decoder.layers.*.mixer.conv1d_{suffix}",
+                    hf_param=f"backbone.layers.*.mixer.conv1d.{suffix}",
+                )
+                for suffix in ("weight", "bias")
+                if f"decoder.layers.*.mixer.conv1d_{suffix}" not in known_names
+            ]
+            return MegatronMappingRegistry(*base, *mamba, *extras)
 
     return MilesNemotronHBridge
 
